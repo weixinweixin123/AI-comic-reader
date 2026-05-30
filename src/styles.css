@@ -495,6 +495,68 @@ textarea {
   color: #c4cfb4;
 }
 
+.memory-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.memory-stats span {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(226, 232, 221, 0.1);
+  border-radius: 9px;
+  background: rgba(10, 13, 12, 0.28);
+  color: #dfe4dc;
+  font-size: 12px;
+  text-align: center;
+}
+
+.memory-section {
+  margin: 12px 12px 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(226, 232, 221, 0.1);
+  border-radius: 10px;
+  background: rgba(10, 13, 12, 0.2);
+}
+
+.memory-section h3 {
+  margin: 0 0 8px;
+  color: #eef2ea;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.memory-section ul {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.memory-section li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  color: #cdd4c9;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.memory-section strong {
+  color: #c4cfb4;
+  font-weight: 700;
+}
+
+.memory-section p {
+  margin: 0;
+  color: #879187;
+  font-size: 12px;
+}
+
 .memory-textarea.compact {
   min-height: 86px;
   margin-top: 0;

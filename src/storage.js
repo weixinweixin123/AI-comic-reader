@@ -1,4 +1,5 @@
 import { defaultConfig, defaultLayout } from "./config.js";
+import { createMemoryBook } from "./memory/engine.js";
 
 export function loadConfig() {
   try {
@@ -51,7 +52,8 @@ export function pickMemoryFields(source) {
     characterNotes: source.characterNotes || "",
     userPrefs: source.userPrefs || "",
     personaPrompt: source.personaPrompt || "",
-    danmakuPrompt: source.danmakuPrompt || ""
+    danmakuPrompt: source.danmakuPrompt || "",
+    memoryBook: createMemoryBook(source)
   };
 }
 

@@ -14,6 +14,7 @@ import {
   Square
 } from "lucide-react";
 import { DanmakuLayer, IconButton, LabeledInput, Panel } from "./components.jsx";
+import { createMemoryBook, getMemoryStats } from "./memory/engine.js";
 
 export function PreviewPanel({ layout, onMove, onResize, isSharing, config, danmakuItems, videoRef, canvasRef, onStartShare, onStopShare }) {
   return (
@@ -227,15 +228,58 @@ export function NotesPanel({
 }
 
 export function MemoryPanel({ layout, onMove, onResize, config, setConfig }) {
+  const memoryBook = createMemoryBook(config);
+  const stats = getMemoryStats(config);
+
   return (
     <Panel id="memory" title="剧情记忆" icon={<Bot size={17} />} layout={layout} onMove={onMove} onResize={onResize}>
       <div className="memory-status">
         <CheckCircle2 size={14} />
         <span>{config.autoMemory ? "自动记忆已开启：AI 会在不打断你的情况下追加关键剧情。" : "自动记忆已关闭：只使用你手动写入的内容。"}</span>
       </div>
-      <textarea className="memory-textarea" value={config.storyMemory} onChange={(event) => setConfig({ ...config, storyMemory: event.target.value })} placeholder="记录目前剧情进度：已经发生的事件、伏笔、当前冲突。生成陪看/弹幕时会带给 AI。" />
-      <textarea className="memory-textarea compact" value={config.characterNotes} onChange={(event) => setConfig({ ...config, characterNotes: event.target.value })} placeholder="角色关系/人设笔记：谁是谁、关系、动机、你的猜测。" />
+      <div className="memory-stats">
+        <span>剧情 {stats.events}</span>
+        <span>角色 {stats.characters}</span>
+        <span>伏笔 {stats.questions}</span>
+        <span>短期 {stats.shortTerm}</span>
+      </div>
+      <MemorySection title="剧情时间线" empty="还没有自动记录剧情。">
+        {memoryBook.timeline.slice(-6).map((event) => (
+          <li key={event.id}>
+            <strong>{event.importance === "high" ? "重要" : event.importance === "low" ? "轻量" : "剧情"}</strong>
+            <span>{event.summary}</span>
+          </li>
+        ))}
+      </MemorySection>
+      <MemorySection title="角色卡片" empty="角色关系会在这里逐步出现。">
+        {memoryBook.characters.slice(-5).map((character) => (
+          <li key={character.id}>
+            <strong>{character.name}</strong>
+            <span>{character.facts.slice(-2).join("；") || character.description || "等待更多信息"}</span>
+          </li>
+        ))}
+      </MemorySection>
+      <MemorySection title="未解伏笔" empty="暂时没有未解疑点。">
+        {memoryBook.openQuestions.filter((item) => item.status !== "resolved").slice(-5).map((item) => (
+          <li key={item.id}>
+            <strong>疑点</strong>
+            <span>{item.question}</span>
+          </li>
+        ))}
+      </MemorySection>
+      <textarea className="memory-textarea compact" value={config.storyMemory} onChange={(event) => setConfig({ ...config, storyMemory: event.target.value })} placeholder="兼容文本：剧情摘要会同步生成，你也可以手动编辑。" />
+      <textarea className="memory-textarea compact" value={config.characterNotes} onChange={(event) => setConfig({ ...config, characterNotes: event.target.value })} placeholder="兼容文本：角色摘要会同步生成，你也可以手动编辑。" />
     </Panel>
+  );
+}
+
+function MemorySection({ title, empty, children }) {
+  const items = React.Children.toArray(children).filter(Boolean);
+  return (
+    <section className="memory-section">
+      <h3>{title}</h3>
+      {items.length ? <ul>{items}</ul> : <p>{empty}</p>}
+    </section>
   );
 }
 

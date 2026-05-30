@@ -11,8 +11,9 @@ import {
 import { DanmakuOverlayView, FloatingView } from "./components.jsx";
 import { defaultConfig, defaultLayout, panelMin } from "./config.js";
 import { clamp, parseDanmakuLines } from "./danmaku.js";
+import { applyStructuredMemoryPatch, buildMemoryPayload } from "./memory/engine.js";
 import { ApiPanel, CompanionPanel, MemoryPanel, NotesPanel, PersonaPanel, PreviewPanel, SettingsPanel } from "./panels.jsx";
-import { appendMemoryLine, loadConfig, loadFloatingState, loadLayout, loadWorkProfiles, makeDefaultWorkProfile, pickMemoryFields } from "./storage.js";
+import { loadConfig, loadFloatingState, loadLayout, loadWorkProfiles, makeDefaultWorkProfile, pickMemoryFields } from "./storage.js";
 import "./styles.css";
 
 const apiBase = window.location.protocol === "file:" ? "http://127.0.0.1:8787" : "";
@@ -90,7 +91,7 @@ function App() {
     setWorkProfiles((current) => current.map((profile) => (
       profile.id === activeWorkId ? { ...profile, ...pickMemoryFields(config), updatedAt: Date.now() } : profile
     )));
-  }, [config.workTitle, config.storyMemory, config.characterNotes, config.userPrefs, config.personaPrompt, config.danmakuPrompt]);
+  }, [config.workTitle, config.storyMemory, config.characterNotes, config.userPrefs, config.personaPrompt, config.danmakuPrompt, config.memoryBook]);
 
   useEffect(() => {
     localStorage.setItem("watchmate-layout", JSON.stringify(layout));
@@ -353,14 +354,7 @@ function App() {
         image,
         screenNotes,
         autoMemory: config.autoMemory && !userMessage,
-        memory: {
-          workTitle: config.workTitle,
-          storyMemory: config.storyMemory,
-          characterNotes: config.characterNotes,
-          userPrefs: config.userPrefs,
-          personaPrompt: config.personaPrompt,
-          danmakuPrompt: config.danmakuPrompt
-        },
+        memory: buildMemoryPayload(config),
         userMessage,
         history: messages.slice(-8)
       };
@@ -388,18 +382,13 @@ function App() {
 
   function applyMemoryPatch(patch) {
     if (!config.autoMemory || !patch || typeof patch !== "object") return;
-    const hasStory = Boolean(patch.storyMemoryAppend?.trim());
-    const hasCharacters = Boolean(patch.characterNotesAppend?.trim());
-    if (!hasStory && !hasCharacters) return;
+    const hasLegacy = Boolean(patch.storyMemoryAppend?.trim()) || Boolean(patch.characterNotesAppend?.trim());
+    const hasStructured = ["storyEvents", "characterUpdates", "openQuestions", "shortTerm"].some((key) => Array.isArray(patch[key]) && patch[key].length);
+    const hasSummary = Boolean(patch.workSummary?.trim()) || Boolean(patch.currentArcSummary?.trim());
+    if (!hasLegacy && !hasStructured && !hasSummary) return;
 
     setConfig((current) => {
-      const storyMemory = hasStory
-        ? appendMemoryLine(current.storyMemory, patch.storyMemoryAppend, "剧情")
-        : current.storyMemory;
-      const characterNotes = hasCharacters
-        ? appendMemoryLine(current.characterNotes, patch.characterNotesAppend, "角色")
-        : current.characterNotes;
-      return { ...current, storyMemory, characterNotes };
+      return applyStructuredMemoryPatch(current, patch);
     });
     setStatus("已自动更新剧情记忆");
   }

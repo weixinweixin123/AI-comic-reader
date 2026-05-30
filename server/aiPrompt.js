@@ -37,9 +37,9 @@ export function buildMessages({ persona, cadence, danmakuMode, danmakuCount, ima
         "",
         "同时判断当前画面是否出现值得长期记住的新信息。",
         "只记已经在画面中明确出现或高度暗示的信息，不要剧透、不要编原作后续。",
-        "如果只是桌面、菜单、重复画面、无剧情变化，memoryPatch 字段留空字符串。",
+        "如果只是桌面、菜单、重复画面、无剧情变化，memoryPatch 内的数组都留空，不要硬写记忆。",
         "请只输出 JSON，不要 Markdown，不要代码块。格式如下：",
-        "{\"text\":\"给用户看的陪看反应或弹幕，多条弹幕用换行分隔\",\"memoryPatch\":{\"storyMemoryAppend\":\"新增剧情进展，20-60字，没有则空\",\"characterNotesAppend\":\"新增角色关系/人设，20-60字，没有则空\"}}"
+        "{\"text\":\"给用户看的陪看反应或弹幕，多条弹幕用换行分隔\",\"memoryPatch\":{\"storyEvents\":[{\"summary\":\"新增剧情进展，20-60字\",\"importance\":\"low|medium|high\",\"confidence\":\"certain|inferred|uncertain\",\"tags\":[\"可选标签\"]}],\"characterUpdates\":[{\"name\":\"角色名\",\"fact\":\"新增角色事实或关系，20-60字\",\"confidence\":\"certain|inferred|uncertain\",\"relationships\":[{\"target\":\"相关角色\",\"type\":\"关系类型\",\"note\":\"关系说明\"}]}],\"openQuestions\":[{\"question\":\"未解决伏笔或疑点\",\"relatedCharacters\":[\"角色名\"],\"evidence\":\"来自当前画面的证据\"}],\"shortTerm\":[{\"summary\":\"刚刚发生的短期上下文\"}],\"workSummary\":\"可选：作品总览更新\",\"currentArcSummary\":\"可选：当前阶段摘要\"}}"
       ].join("\n")
     : basePrompt;
 
@@ -87,8 +87,48 @@ function parseJsonObject(text) {
 function sanitizeMemoryPatch(patch = {}) {
   return {
     storyMemoryAppend: String(patch.storyMemoryAppend || "").trim().slice(0, 160),
-    characterNotesAppend: String(patch.characterNotesAppend || "").trim().slice(0, 160)
+    characterNotesAppend: String(patch.characterNotesAppend || "").trim().slice(0, 160),
+    storyEvents: sanitizeList(patch.storyEvents, (item) => ({
+      summary: String(item.summary || item.text || "").trim().slice(0, 160),
+      importance: normalizeEnum(item.importance, ["low", "medium", "high"], "medium"),
+      confidence: normalizeEnum(item.confidence, ["certain", "inferred", "uncertain"], "certain"),
+      tags: sanitizeStringList(item.tags, 6)
+    })).filter((item) => item.summary),
+    characterUpdates: sanitizeList(patch.characterUpdates, (item) => ({
+      name: String(item.name || item.character || "").trim().slice(0, 40),
+      fact: String(item.fact || item.summary || item.description || "").trim().slice(0, 160),
+      confidence: normalizeEnum(item.confidence, ["certain", "inferred", "uncertain"], "certain"),
+      relationships: sanitizeList(item.relationships, (rel) => ({
+        target: String(rel.target || rel.name || "").trim().slice(0, 40),
+        type: String(rel.type || rel.relation || "").trim().slice(0, 32),
+        note: String(rel.note || rel.summary || "").trim().slice(0, 120)
+      })).filter((rel) => rel.target || rel.type || rel.note).slice(0, 4)
+    })).filter((item) => item.name || item.fact),
+    openQuestions: sanitizeList(patch.openQuestions, (item) => ({
+      question: String(item.question || item.text || "").trim().slice(0, 160),
+      relatedCharacters: sanitizeStringList(item.relatedCharacters, 6),
+      evidence: String(item.evidence || "").trim().slice(0, 160)
+    })).filter((item) => item.question),
+    shortTerm: sanitizeList(patch.shortTerm, (item) => ({
+      summary: String(item.summary || item.text || item || "").trim().slice(0, 140)
+    })).filter((item) => item.summary),
+    workSummary: String(patch.workSummary || "").trim().slice(0, 240),
+    currentArcSummary: String(patch.currentArcSummary || "").trim().slice(0, 240)
   };
+}
+
+function sanitizeList(value, mapper) {
+  return Array.isArray(value) ? value.slice(0, 12).map((item) => mapper(item || {})) : [];
+}
+
+function sanitizeStringList(value, max) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").trim().slice(0, 40)).filter(Boolean).slice(0, max)
+    : [];
+}
+
+function normalizeEnum(value, allowed, fallback) {
+  return allowed.includes(value) ? value : fallback;
 }
 
 function stripJsonNoise(text) {
@@ -98,11 +138,32 @@ function stripJsonNoise(text) {
 }
 
 function buildMemoryBlock(memory = {}) {
+  const book = memory.memoryBook || {};
   const lines = [
     memory.workTitle ? `当前作品：${memory.workTitle}` : "",
     memory.storyMemory ? `剧情记忆：${memory.storyMemory}` : "",
-    memory.characterNotes ? `角色关系/人设笔记：${memory.characterNotes}` : ""
+    memory.characterNotes ? `角色关系/人设笔记：${memory.characterNotes}` : "",
+    book.summaries?.work ? `作品总览：${book.summaries.work}` : "",
+    book.summaries?.currentArc ? `当前阶段：${book.summaries.currentArc}` : "",
+    formatMemoryItems("最近剧情事件", book.timeline, "summary"),
+    formatMemoryItems("重要事件", book.importantEvents, "summary"),
+    formatCharacters(book.characters),
+    formatMemoryItems("未解伏笔", book.openQuestions, "question"),
+    formatMemoryItems("短期上下文", book.recent, "summary")
   ].filter(Boolean);
 
   return lines.length ? `本地记忆：\n${lines.join("\n")}` : "";
+}
+
+function formatMemoryItems(label, items, key) {
+  if (!Array.isArray(items) || !items.length) return "";
+  return `${label}：\n${items.slice(0, 8).map((item) => `- ${item[key]}`).join("\n")}`;
+}
+
+function formatCharacters(characters) {
+  if (!Array.isArray(characters) || !characters.length) return "";
+  return `角色记忆：\n${characters.slice(0, 8).map((item) => {
+    const facts = Array.isArray(item.facts) ? item.facts.slice(-3).join("；") : "";
+    return `- ${item.name}${facts ? `：${facts}` : ""}`;
+  }).join("\n")}`;
 }
