@@ -28,13 +28,13 @@ export const defaultConfig = {
 };
 
 export const defaultLayout = {
-  preview: { x: 24, y: 18, w: 760, h: 500, z: 1 },
-  companion: { x: 808, y: 18, w: 420, h: 500, z: 2 },
-  api: { x: 24, y: 538, w: 380, h: 248, z: 1 },
-  settings: { x: 424, y: 538, w: 380, h: 248, z: 1 },
-  notes: { x: 824, y: 538, w: 404, h: 248, z: 1 },
-  memory: { x: 1040, y: 18, w: 420, h: 360, z: 1 },
-  persona: { x: 1040, y: 400, w: 420, h: 386, z: 1 }
+  preview: { x: 24, y: 18, w: 690, h: 430, z: 1 },
+  companion: { x: 734, y: 18, w: 370, h: 430, z: 2 },
+  memory: { x: 1124, y: 18, w: 330, h: 430, z: 1 },
+  api: { x: 24, y: 468, w: 370, h: 238, z: 1 },
+  settings: { x: 414, y: 468, w: 370, h: 238, z: 1 },
+  notes: { x: 804, y: 468, w: 330, h: 238, z: 1 },
+  persona: { x: 1154, y: 468, w: 300, h: 238, z: 1 }
 };
 
 export const panelMin = {
@@ -44,5 +44,5 @@ export const panelMin = {
   settings: { w: 320, h: 220 },
   notes: { w: 320, h: 220 },
   memory: { w: 340, h: 260 },
-  persona: { w: 340, h: 280 }
+  persona: { w: 300, h: 220 }
 };

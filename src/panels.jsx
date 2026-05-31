@@ -199,7 +199,7 @@ export function NotesPanel({
   const updatedAt = stats.lastUpdatedAt ? new Date(stats.lastUpdatedAt).toLocaleString("zh-CN", { hour12: false }) : "暂无";
 
   return (
-    <Panel id="notes" title="当前画面补充" icon={<Sparkles size={17} />} layout={layout} onMove={onMove} onResize={onResize}>
+    <Panel id="notes" title="作品档案" icon={<Sparkles size={17} />} layout={layout} onMove={onMove} onResize={onResize}>
       <label className="field">
         <span>作品档案</span>
         <select value={activeWorkId} onChange={(event) => onSelectProfile(event.target.value)}>
@@ -233,7 +233,7 @@ export function NotesPanel({
         <span>作品名</span>
         <input value={config.workTitle} placeholder="例如：某部动画 / 漫画 / galgame" onChange={(event) => setConfig({ ...config, workTitle: event.target.value })} />
       </label>
-      <textarea value={screenNotes} onChange={(event) => setScreenNotes(event.target.value)} placeholder="可选：补充 OCR 文字、角色名、当前作品，或写“不要剧透”。" />
+      <textarea value={screenNotes} onChange={(event) => setScreenNotes(event.target.value)} placeholder="当前画面补充：OCR 文字、角色名、当前章节，或写“不要剧透”。" />
       <div className="watch-actions">
         <button className="primary" onClick={isWatching ? onStopWatching : onStartWatching} disabled={!isSharing || !canCall}>
           {isWatching ? <Pause size={18} /> : <Play size={18} />}

@@ -142,6 +142,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const onResetLayout = (event) => setLayout(event.detail || defaultLayout);
+    window.addEventListener("watchmate-reset-layout", onResetLayout);
+    return () => window.removeEventListener("watchmate-reset-layout", onResetLayout);
+  }, []);
+
+  useEffect(() => {
     const channel = new BroadcastChannel("watchmate-floating");
     if (isFloatingView) {
       channel.onmessage = (event) => {
@@ -567,7 +573,7 @@ function App() {
             <Radio size={15} />
             <span>{status}</span>
           </div>
-          <button className="ghost-button" onClick={() => setLayout(defaultLayout)} title="恢复默认布局">
+          <button className="ghost-button" onClick={resetLayout} title="恢复默认布局">
             <RefreshCcw size={16} />
             <span>重置布局</span>
           </button>
@@ -647,6 +653,31 @@ function App() {
       </section>
     </main>
   );
+}
+
+function resetLayout() {
+  const boardWidth = document.querySelector(".panel-board")?.clientWidth || 1480;
+  if (boardWidth >= 1320) {
+    window.dispatchEvent(new CustomEvent("watchmate-reset-layout", { detail: defaultLayout }));
+    return;
+  }
+
+  const gap = 16;
+  const x = 24;
+  const usable = Math.max(900, boardWidth - x * 2);
+  const leftW = Math.max(520, Math.floor(usable * 0.58));
+  const rightW = Math.max(340, usable - leftW - gap);
+  const bottomW = Math.floor((usable - gap) / 2);
+  const compact = {
+    preview: { x, y: 18, w: leftW, h: 420, z: 1 },
+    companion: { x: x + leftW + gap, y: 18, w: rightW, h: 420, z: 2 },
+    api: { x, y: 458, w: bottomW, h: 230, z: 1 },
+    settings: { x: x + bottomW + gap, y: 458, w: bottomW, h: 230, z: 1 },
+    notes: { x, y: 708, w: bottomW, h: 260, z: 1 },
+    memory: { x: x + bottomW + gap, y: 708, w: bottomW, h: 360, z: 1 },
+    persona: { x, y: 988, w: usable, h: 240, z: 1 }
+  };
+  window.dispatchEvent(new CustomEvent("watchmate-reset-layout", { detail: compact }));
 }
 
 function openFloatingWindow() {
