@@ -3,6 +3,8 @@ const MAX_EVENTS = 80;
 const MAX_CHARACTERS = 60;
 const MAX_QUESTIONS = 50;
 const MAX_SHORT_TERM = 16;
+const COMPACT_AFTER_EVENTS = 48;
+const KEEP_RECENT_EVENTS = 30;
 
 export function createMemoryBook(source = {}) {
   const existing = source.memoryBook && typeof source.memoryBook === "object" ? source.memoryBook : {};
@@ -18,6 +20,7 @@ export function createMemoryBook(source = {}) {
     },
     stats: {
       writes: Number(existing.stats?.writes || 0),
+      compressions: Number(existing.stats?.compressions || 0),
       lastUpdatedAt: existing.stats?.lastUpdatedAt || source.updatedAt || null
     }
   });
@@ -36,6 +39,7 @@ export function normalizeMemoryBook(book = {}) {
     },
     stats: {
       writes: Number(book.stats?.writes || 0),
+      compressions: Number(book.stats?.compressions || 0),
       lastUpdatedAt: book.stats?.lastUpdatedAt || null
     }
   };
@@ -75,15 +79,28 @@ export function applyStructuredMemoryPatch(config, patch) {
     },
     stats: {
       writes: book.stats.writes + countPatchWrites(normalizedPatch),
+      compressions: book.stats.compressions,
       lastUpdatedAt: now
     }
   });
+  const compactedBook = maybeCompactMemoryBook(nextBook, now);
 
   return {
     ...config,
-    memoryBook: nextBook,
-    storyMemory: renderStoryMemory(nextBook),
-    characterNotes: renderCharacterNotes(nextBook)
+    memoryBook: compactedBook,
+    storyMemory: renderStoryMemory(compactedBook),
+    characterNotes: renderCharacterNotes(compactedBook)
+  };
+}
+
+export function compactMemoryConfig(config, options = {}) {
+  const book = createMemoryBook(config);
+  const compactedBook = compactMemoryBook(book, Date.now(), options);
+  return {
+    ...config,
+    memoryBook: compactedBook,
+    storyMemory: renderStoryMemory(compactedBook),
+    characterNotes: renderCharacterNotes(compactedBook)
   };
 }
 
@@ -121,6 +138,7 @@ export function getMemoryStats(config) {
     questions: book.openQuestions.filter((item) => item.status !== "resolved").length,
     shortTerm: book.shortTerm.length,
     writes: book.stats.writes,
+    compressions: book.stats.compressions,
     lastUpdatedAt: book.stats.lastUpdatedAt
   };
 }
@@ -164,6 +182,51 @@ function normalizePatch(patch = {}) {
     workSummary: cleanText(patch.workSummary),
     currentArcSummary: cleanText(patch.currentArcSummary)
   };
+}
+
+function maybeCompactMemoryBook(book, now) {
+  if (book.timeline.length <= COMPACT_AFTER_EVENTS) return book;
+  return compactMemoryBook(book, now);
+}
+
+function compactMemoryBook(book, now, options = {}) {
+  const keepRecent = Number(options.keepRecent || KEEP_RECENT_EVENTS);
+  if (book.timeline.length <= keepRecent) return book;
+
+  const archive = book.timeline.slice(0, -keepRecent);
+  const recent = book.timeline.slice(-keepRecent);
+  const highArchive = archive.filter((event) => event.importance === "high").slice(-10);
+  const archiveSummary = summarizeEvents(archive);
+  const previousSummary = book.summaries.work || "";
+  const workSummary = trimSummary([previousSummary, archiveSummary].filter(Boolean).join("\n"));
+
+  return normalizeMemoryBook({
+    ...book,
+    timeline: dedupeByText([...highArchive, ...recent], "summary").slice(-MAX_EVENTS),
+    summaries: {
+      ...book.summaries,
+      work: workSummary
+    },
+    stats: {
+      ...book.stats,
+      compressions: Number(book.stats.compressions || 0) + 1,
+      lastUpdatedAt: now
+    }
+  });
+}
+
+function summarizeEvents(events) {
+  if (!events.length) return "";
+  const important = events.filter((event) => event.importance === "high").slice(-5);
+  const anchors = events.filter((event) => event.importance !== "high").filter((_, index) => index % Math.max(1, Math.ceil(events.length / 8)) === 0).slice(-8);
+  const selected = dedupeByText([...important, ...anchors], "summary").map((event) => event.summary);
+  return `此前剧情摘要：${selected.join("；")}`;
+}
+
+function trimSummary(text) {
+  const value = String(text || "").trim();
+  if (value.length <= 1200) return value;
+  return value.slice(-1200);
 }
 
 function makeTimelineEvent(event, now) {

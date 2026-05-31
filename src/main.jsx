@@ -11,7 +11,7 @@ import {
 import { DanmakuOverlayView, FloatingView } from "./components.jsx";
 import { defaultConfig, defaultLayout, panelMin } from "./config.js";
 import { clamp, parseDanmakuLines } from "./danmaku.js";
-import { applyStructuredMemoryPatch, buildMemoryPayload } from "./memory/engine.js";
+import { applyStructuredMemoryPatch, buildMemoryPayload, compactMemoryConfig } from "./memory/engine.js";
 import { ApiPanel, CompanionPanel, MemoryPanel, NotesPanel, PersonaPanel, PreviewPanel, SettingsPanel } from "./panels.jsx";
 import { loadConfig, loadFloatingState, loadLayout, loadWorkProfiles, makeDefaultWorkProfile, pickMemoryFields } from "./storage.js";
 import "./styles.css";
@@ -524,6 +524,11 @@ function App() {
     setStatus("作品记忆已保存");
   }
 
+  function compactCurrentMemory() {
+    setConfig((current) => compactMemoryConfig(current, { keepRecent: 28 }));
+    setStatus("已压缩当前作品记忆");
+  }
+
   function deleteCurrentWorkProfile() {
     if (activeWorkId === "default") {
       setStatus("默认作品不能删除");
@@ -628,6 +633,7 @@ function App() {
           onCreateProfile={createWorkProfile}
           onSaveProfile={saveCurrentWorkProfile}
           onDeleteProfile={deleteCurrentWorkProfile}
+          onCompactMemory={compactCurrentMemory}
           isWatching={isWatching}
           isSharing={isSharing}
           isLoading={isLoading}

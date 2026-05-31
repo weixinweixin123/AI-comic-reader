@@ -185,6 +185,7 @@ export function NotesPanel({
   onCreateProfile,
   onSaveProfile,
   onDeleteProfile,
+  onCompactMemory,
   isWatching,
   isSharing,
   isLoading,
@@ -193,6 +194,10 @@ export function NotesPanel({
   onStopWatching,
   onObserveOnce
 }) {
+  const memoryBook = createMemoryBook(config);
+  const stats = getMemoryStats(config);
+  const updatedAt = stats.lastUpdatedAt ? new Date(stats.lastUpdatedAt).toLocaleString("zh-CN", { hour12: false }) : "暂无";
+
   return (
     <Panel id="notes" title="当前画面补充" icon={<Sparkles size={17} />} layout={layout} onMove={onMove} onResize={onResize}>
       <label className="field">
@@ -208,6 +213,22 @@ export function NotesPanel({
         <button className="secondary" onClick={onSaveProfile}>保存</button>
         <button className="secondary danger" onClick={onDeleteProfile}>删除</button>
       </div>
+      <section className="work-detail">
+        <div className="work-detail-head">
+          <div>
+            <strong>{config.workTitle || "未命名作品"}</strong>
+            <span>上次记忆更新：{updatedAt}</span>
+          </div>
+          <button className="secondary" onClick={onCompactMemory}>压缩记忆</button>
+        </div>
+        <div className="work-detail-grid">
+          <span>剧情 {stats.events}</span>
+          <span>角色 {stats.characters}</span>
+          <span>伏笔 {stats.questions}</span>
+          <span>压缩 {stats.compressions}</span>
+        </div>
+        <p>{memoryBook.summaries.work || "作品总览会在长篇观看和手动压缩后逐渐形成。"}</p>
+      </section>
       <label className="field">
         <span>作品名</span>
         <input value={config.workTitle} placeholder="例如：某部动画 / 漫画 / galgame" onChange={(event) => setConfig({ ...config, workTitle: event.target.value })} />
