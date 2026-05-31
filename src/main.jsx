@@ -657,8 +657,23 @@ function App() {
 
 function resetLayout() {
   const boardWidth = document.querySelector(".panel-board")?.clientWidth || 1480;
-  if (boardWidth >= 1320) {
-    window.dispatchEvent(new CustomEvent("watchmate-reset-layout", { detail: defaultLayout }));
+  if (boardWidth >= 1680) {
+    const gap = 18;
+    const x = 24;
+    const usable = boardWidth - x * 2;
+    const previewW = Math.floor(usable * 0.42);
+    const midW = Math.floor(usable * 0.25);
+    const rightW = usable - previewW - midW - gap * 2;
+    const wide = {
+      preview: { x, y: 18, w: previewW, h: 430, z: 1 },
+      companion: { x: x + previewW + gap, y: 18, w: midW, h: 430, z: 2 },
+      memory: { x: x + previewW + midW + gap * 2, y: 18, w: rightW, h: 430, z: 1 },
+      api: { x, y: 468, w: Math.floor(previewW * 0.52), h: 238, z: 1 },
+      settings: { x: x + Math.floor(previewW * 0.52) + gap, y: 468, w: previewW - Math.floor(previewW * 0.52) - gap, h: 238, z: 1 },
+      notes: { x: x + previewW + gap, y: 468, w: midW, h: 300, z: 1 },
+      persona: { x: x + previewW + midW + gap * 2, y: 468, w: rightW, h: 300, z: 1 }
+    };
+    window.dispatchEvent(new CustomEvent("watchmate-reset-layout", { detail: wide }));
     return;
   }
 
