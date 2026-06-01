@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("watchmate", {
+  openComicFile: () => ipcRenderer.invoke("watchmate:open-comic-file"),
   openFloatingWindow: () => ipcRenderer.invoke("watchmate:open-floating"),
   closeFloatingWindow: () => ipcRenderer.invoke("watchmate:close-floating"),
   toggleFloatingPin: () => ipcRenderer.invoke("watchmate:toggle-floating-pin"),

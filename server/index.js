@@ -2,7 +2,7 @@ import express from "express";
 import "dotenv/config";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { buildMessages, parseAssistantOutput } from "./aiPrompt.js";
+import { buildComicDanmakuMessages, buildComicReadMessages, buildMessages, parseAssistantOutput, parseComicDanmakuOutput, parseComicReadOutput } from "./aiPrompt.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, "..");
@@ -111,6 +111,148 @@ export function createServer() {
       res.json(parsed);
     } catch (error) {
       res.status(500).json({ error: error.message || "本地代理异常。" });
+    }
+  });
+
+  app.post("/api/comic/danmaku", async (req, res) => {
+    try {
+      const {
+        baseUrl,
+        apiKey,
+        model,
+        visionModel,
+        title,
+        pageIndex,
+        totalPages,
+        image,
+        density,
+        personaPrompt,
+        danmakuPrompt,
+        userPrefs,
+        previousPages = []
+      } = req.body || {};
+
+      const resolvedBaseUrl = baseUrl || process.env.AI_BASE_URL;
+      const resolvedApiKey = apiKey || process.env.AI_API_KEY;
+      const resolvedModel = visionModel || model || process.env.AI_VISION_MODEL || process.env.AI_CHAT_MODEL;
+
+      if (!resolvedBaseUrl || !resolvedApiKey || !resolvedModel) {
+        return res.status(400).json({ error: "请先填写 Base URL、API Key 和视觉模型，或在本地 .env 中配置。" });
+      }
+
+      if (!image) {
+        return res.status(400).json({ error: "缺少漫画页面图像。" });
+      }
+
+      const endpoint = buildChatEndpoint(resolvedBaseUrl);
+      const messages = buildComicDanmakuMessages({
+        title,
+        pageIndex,
+        totalPages,
+        image,
+        density,
+        personaPrompt,
+        danmakuPrompt,
+        userPrefs,
+        previousPages
+      });
+
+      const upstream = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${resolvedApiKey}`
+        },
+        body: JSON.stringify({
+          model: resolvedModel,
+          messages,
+          temperature: 0.82,
+          max_tokens: Math.min(1400, Math.max(420, Number(density || 10) * 46))
+        })
+      });
+
+      const data = await upstream.json().catch(() => ({}));
+
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({
+          error: data?.error?.message || data?.message || "漫画弹幕生成请求失败。",
+          detail: data
+        });
+      }
+
+      const rawText = data?.choices?.[0]?.message?.content?.trim();
+      res.json(parseComicDanmakuOutput(rawText, Number(density || 10)));
+    } catch (error) {
+      res.status(500).json({ error: error.message || "漫画弹幕生成异常。" });
+    }
+  });
+
+  app.post("/api/comic/read", async (req, res) => {
+    try {
+      const {
+        baseUrl,
+        apiKey,
+        model,
+        visionModel,
+        title,
+        pageIndex,
+        totalPages,
+        image,
+        previousPages = [],
+        workMemory = "",
+        userPrefs = ""
+      } = req.body || {};
+
+      const resolvedBaseUrl = baseUrl || process.env.AI_BASE_URL;
+      const resolvedApiKey = apiKey || process.env.AI_API_KEY;
+      const resolvedModel = visionModel || model || process.env.AI_VISION_MODEL || process.env.AI_CHAT_MODEL;
+
+      if (!resolvedBaseUrl || !resolvedApiKey || !resolvedModel) {
+        return res.status(400).json({ error: "请先填写 Base URL、API Key 和视觉模型，或在本地 .env 中配置。" });
+      }
+
+      if (!image) {
+        return res.status(400).json({ error: "缺少漫画页面图像。" });
+      }
+
+      const endpoint = buildChatEndpoint(resolvedBaseUrl);
+      const messages = buildComicReadMessages({
+        title,
+        pageIndex,
+        totalPages,
+        image,
+        previousPages,
+        workMemory,
+        userPrefs
+      });
+
+      const upstream = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${resolvedApiKey}`
+        },
+        body: JSON.stringify({
+          model: resolvedModel,
+          messages,
+          temperature: 0.35,
+          max_tokens: 720
+        })
+      });
+
+      const data = await upstream.json().catch(() => ({}));
+
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({
+          error: data?.error?.message || data?.message || "漫画阅读请求失败。",
+          detail: data
+        });
+      }
+
+      const rawText = data?.choices?.[0]?.message?.content?.trim();
+      res.json(parseComicReadOutput(rawText));
+    } catch (error) {
+      res.status(500).json({ error: error.message || "漫画阅读异常。" });
     }
   });
 

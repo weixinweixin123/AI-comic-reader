@@ -1,4 +1,5 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, screen, session } from "electron";
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, screen, session } from "electron";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer } from "../server/index.js";
@@ -143,6 +144,39 @@ function setDanmakuOverlayEditMode(editing) {
 }
 
 function setupIpc() {
+  ipcMain.handle("watchmate:open-comic-file", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "导入漫画 PDF 或图片",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "漫画文件", extensions: ["pdf", "png", "jpg", "jpeg", "webp"] },
+        { name: "All Files", extensions: ["*"] }
+      ]
+    });
+
+    if (result.canceled || !result.filePaths.length) return [];
+
+    return Promise.all(result.filePaths.map(async (filePath) => {
+      const buffer = await fs.readFile(filePath);
+      const stat = await fs.stat(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = ext === ".pdf"
+        ? "application/pdf"
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".webp"
+            ? "image/webp"
+            : "image/jpeg";
+      return {
+        name: path.basename(filePath),
+        size: stat.size,
+        lastModified: stat.mtimeMs,
+        type: mime,
+        dataUrl: `data:${mime};base64,${buffer.toString("base64")}`
+      };
+    }));
+  });
+
   ipcMain.handle("watchmate:open-floating", async () => {
     await createFloatingWindow();
   });

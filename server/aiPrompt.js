@@ -167,3 +167,187 @@ function formatCharacters(characters) {
     return `- ${item.name}${facts ? `：${facts}` : ""}`;
   }).join("\n")}`;
 }
+export function buildComicDanmakuMessages({
+  title,
+  pageIndex,
+  totalPages,
+  image,
+  density,
+  personaPrompt,
+  danmakuPrompt,
+  userPrefs,
+  previousPages
+}) {
+  const history = Array.isArray(previousPages) && previousPages.length
+    ? previousPages.map((page) => `第 ${Number(page.index) + 1} 页：${page.summary}`).join("\n")
+    : "暂无前文摘要。";
+  const count = Math.max(4, Math.min(36, Number(density || 10)));
+  const system = [
+    "你是一个漫画陪看弹幕编剧，目标是提前读懂单页漫画，并生成像观众同步观看时发出的自然弹幕。",
+    "你可以吐槽、猜测、共情、提醒用户注意细节，但不要编造后续剧情，不要剧透，不要说自己是 AI。",
+    "弹幕必须短，像真实观众写的即时反应；避免解释腔，避免把画面内容机械复述成说明书。",
+    "如果画面信息不足，就保持不确定表达。",
+    personaPrompt ? `陪伴人格：${personaPrompt}` : "",
+    userPrefs ? `用户偏好：${userPrefs}` : "",
+    danmakuPrompt ? `弹幕风格：${danmakuPrompt}` : ""
+  ].filter(Boolean).join("\n");
+
+  const prompt = [
+    `作品：${title || "未命名漫画"}`,
+    `当前页：第 ${Number(pageIndex) + 1} / ${Number(totalPages || 1)} 页`,
+    `前文摘要：\n${history}`,
+    "",
+    `请为当前页生成 ${count} 条弹幕，并给出本页摘要。`,
+    "返回严格 JSON，不要 Markdown，不要代码块。格式如下：",
+    "位置要求：每条弹幕都可以返回 mode。mode 为 positioned 时，必须带 x/y 百分比坐标和 anchor，用来贴近人物脸旁、对白框旁、道具旁或分镜空白处；mode 为 scroll 时按普通横向弹幕播放。x/y 范围 0-100，不要遮住关键脸部和对白。",
+    JSON.stringify({
+      pageSummary: "用 1-2 句话概括本页发生了什么，以及值得后续记住的信息。",
+      danmaku: [
+        {
+          text: "短弹幕，6-18 个字为佳",
+          startTime: 0.8,
+          mode: "positioned|scroll",
+          x: 64,
+          y: 28,
+          anchor: "人物脸旁|对白框旁|道具旁|分镜空白处|全局反应",
+          lane: 0,
+          speed: 9,
+          emotion: "surprise|funny|tension|soft|detail",
+          style: "standard|soft|bold"
+        }
+      ]
+    })
+  ].join("\n");
+
+  return [
+    { role: "system", content: system },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: image } }
+      ]
+    }
+  ];
+}
+
+export function parseComicDanmakuOutput(rawText, fallbackCount = 10) {
+  const parsed = parseJsonObject(rawText);
+  if (!parsed) {
+    return {
+      pageSummary: "",
+      danmaku: String(rawText || "")
+        .split(/\n|[|]/)
+        .map((text, index) => ({
+          text: text.trim().slice(0, 34),
+          startTime: index * 1.3,
+          mode: "scroll",
+          x: null,
+          y: null,
+          anchor: "",
+          lane: index % 8,
+          speed: 9,
+          emotion: "watching",
+          style: "standard"
+        }))
+        .filter((item) => item.text)
+        .slice(0, fallbackCount)
+    };
+  }
+
+  const source = Array.isArray(parsed.danmaku) ? parsed.danmaku : [];
+  const danmaku = source.map((item, index) => ({
+    text: String(item?.text || item?.content || "").trim().slice(0, 34),
+    startTime: Number.isFinite(Number(item?.startTime)) ? Number(item.startTime) : index * 1.3,
+    mode: item?.mode === "positioned" ? "positioned" : "scroll",
+    x: clampPercent(item?.x),
+    y: clampPercent(item?.y),
+    anchor: String(item?.anchor || "").trim().slice(0, 40),
+    lane: Number.isFinite(Number(item?.lane)) ? Number(item.lane) : index % 8,
+    speed: Number.isFinite(Number(item?.speed)) ? Number(item.speed) : 9,
+    emotion: ["surprise", "funny", "tension", "soft", "detail", "watching"].includes(item?.emotion) ? item.emotion : "watching",
+    style: ["standard", "soft", "bold"].includes(item?.style) ? item.style : "standard"
+  })).filter((item) => item.text).slice(0, Math.max(1, fallbackCount));
+
+  return {
+    pageSummary: String(parsed.pageSummary || parsed.summary || "").trim().slice(0, 260),
+    danmaku
+  };
+}
+
+function clampPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.min(100, Math.max(0, number));
+}
+
+export function buildComicReadMessages({
+  title,
+  pageIndex,
+  totalPages,
+  image,
+  previousPages,
+  workMemory,
+  userPrefs
+}) {
+  const history = Array.isArray(previousPages) && previousPages.length
+    ? previousPages.map((page) => `第 ${Number(page.index) + 1} 页：${page.summary}`).join("\n")
+    : "暂无已读页面。";
+  const system = [
+    "你是漫画作品记忆整理助手。你的任务是通读漫画页面，建立作品级记忆，而不是生成弹幕。",
+    "只记录当前页明确出现或强烈暗示的信息。不要编造后续剧情，不要剧透，不要搜索原作。",
+    "关注剧情进展、人物关系、情绪变化、反复出现的道具/地点/伏笔，以及未来生成弹幕时可能需要引用的上下文。",
+    userPrefs ? `用户偏好：${userPrefs}` : ""
+  ].filter(Boolean).join("\n");
+
+  const prompt = [
+    `作品：${title || "未命名漫画"}`,
+    `当前页：第 ${Number(pageIndex) + 1} / ${Number(totalPages || 1)} 页`,
+    `已有作品记忆：\n${workMemory || "暂无。"}`,
+    `已读前文摘要：\n${history}`,
+    "",
+    "请阅读当前页并返回严格 JSON，不要 Markdown，不要代码块。",
+    JSON.stringify({
+      pageSummary: "本页发生了什么，1-2 句话。",
+      memoryPatch: {
+        story: ["新增剧情事实，短句"],
+        characters: ["人物关系、状态或动机变化，短句"],
+        foreshadowing: ["疑点、伏笔、反复出现的道具或台词"],
+        callbacks: ["与前文有关联的地方；不确定就写可能关联"]
+      },
+      important: false
+    })
+  ].join("\n");
+
+  return [
+    { role: "system", content: system },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: image } }
+      ]
+    }
+  ];
+}
+
+export function parseComicReadOutput(rawText) {
+  const parsed = parseJsonObject(rawText) || {};
+  const patch = parsed.memoryPatch && typeof parsed.memoryPatch === "object" ? parsed.memoryPatch : {};
+  return {
+    pageSummary: String(parsed.pageSummary || parsed.summary || "").trim().slice(0, 300),
+    memoryPatch: {
+      story: readStringList(patch.story),
+      characters: readStringList(patch.characters),
+      foreshadowing: readStringList(patch.foreshadowing),
+      callbacks: readStringList(patch.callbacks)
+    },
+    important: Boolean(parsed.important)
+  };
+}
+
+function readStringList(value) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").replace(/\s+/g, " ").trim().slice(0, 160)).filter(Boolean).slice(0, 8)
+    : [];
+}
